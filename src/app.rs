@@ -157,9 +157,9 @@ impl Palette {
 
 pub fn run() {
     unsafe {
-        // Deliberately share the old application's mutex: opening either version
-        // reveals the already-running calculator instead of creating a duplicate.
-        let mutex_name = wide("TrayCalc_SingleInstance_7f3a");
+        // A distinct name prevents old C# editions from blocking this Rust release.
+        // Re-opening this edition still reveals its already-running window.
+        let mutex_name = wide("TrayCalc_Rust_SingleInstance_2f0");
         let singleton = CreateMutexW(null(), 1, mutex_name.as_ptr());
         if !singleton.is_null() && GetLastError() == ERROR_ALREADY_EXISTS {
             let class = wide(MAIN_CLASS);

@@ -15,14 +15,14 @@
 
 ## Сборка
 
-Нужны Rustup и MSVC Build Tools для Windows. Для текущей конфигурации используется target `x86_64-pc-windows-gnullvm`.
+Нужны Rustup и .NET Framework 4.x (есть в стандартных поддерживаемых версиях Windows). Готовая сборка — один EXE: он хранит Rust-программу и её системную библиотеку внутри себя и при первом запуске автоматически распаковывает их в папку данных приложения.
 
 ```bat
 rustup toolchain install stable-x86_64-pc-windows-gnullvm
 build-rust.bat
 ```
 
-Готовый комплект появится в `dist`: `TrayCalc.exe` и `libunwind.dll`. Эти два файла должны находиться в одной папке.
+Готовый файл появится в `dist/TrayCalc.exe`.
 
 ## Проверка
 
