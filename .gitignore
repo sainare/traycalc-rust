@@ -1,0 +1,14 @@
+/target/
+/dist/
+*.exe
+*.pdb
+*.dll
+
+# Legacy C# implementation kept only locally while moving to Rust.
+/TrayCalc.cs
+/RegressionTests.cs
+/build.bat
+/test_regressions.bat
+/make_icon.ps1
+/TrayCalc.rc
+/TrayCalc.ico
