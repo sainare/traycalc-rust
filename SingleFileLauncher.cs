@@ -13,7 +13,7 @@ internal static class Program
     {
         string folder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "TrayCalc", "runtime", "2.0.1");
+            "TrayCalc", "runtime", "2.0.2");
         Directory.CreateDirectory(folder);
 
         string app = Path.Combine(folder, "TrayCalcRuntime.exe");

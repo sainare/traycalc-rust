@@ -53,6 +53,8 @@ const MAIN_CLASS: &str = "TrayCalcRustWindow";
 const SETTINGS_CLASS: &str = "TrayCalcRustSettings";
 const TITLE: &str = "TrayCalc";
 const ID_EDIT: usize = 100;
+const ID_OVERFLOW_LEFT: usize = 101;
+const ID_OVERFLOW_RIGHT: usize = 102;
 const WM_SHOW_ME: u32 = WM_APP + 77;
 const WM_TRAY: u32 = WM_APP + 78;
 const WM_TOGGLE: u32 = WM_APP + 79;
@@ -66,6 +68,8 @@ struct AppState {
     entries: Vec<history::Entry>,
     hwnd_main: isize,
     hwnd_edit: isize,
+    hwnd_overflow_left: isize,
+    hwnd_overflow_right: isize,
     hwnd_settings: isize,
     old_edit_proc: isize,
     edit_font: isize,
@@ -93,6 +97,8 @@ impl AppState {
             entries: history::load(),
             hwnd_main: 0,
             hwnd_edit: 0,
+            hwnd_overflow_left: 0,
+            hwnd_overflow_right: 0,
             hwnd_settings: 0,
             old_edit_proc: 0,
             edit_font: 0,
@@ -269,9 +275,17 @@ unsafe fn create_edit(parent: HWND, instance: *mut core::ffi::c_void) {
         16, 60, 200, 52, parent, ID_EDIT as HMENU, instance, null(),
     );
     let old = SetWindowLongPtrW(edit, GWLP_WNDPROC, edit_proc as usize as isize);
+    let static_class = wide("STATIC");
+    let ellipsis = wide("…");
+    let left = CreateWindowExW(0, static_class.as_ptr(), ellipsis.as_ptr(), WS_CHILD,
+        20, 60, 24, 52, parent, ID_OVERFLOW_LEFT as HMENU, instance, null());
+    let right = CreateWindowExW(0, static_class.as_ptr(), ellipsis.as_ptr(), WS_CHILD,
+        20, 60, 24, 52, parent, ID_OVERFLOW_RIGHT as HMENU, instance, null());
     {
         let mut state = APP.get().unwrap().lock().unwrap();
         state.hwnd_edit = edit as isize;
+        state.hwnd_overflow_left = left as isize;
+        state.hwnd_overflow_right = right as isize;
         state.old_edit_proc = old;
     }
     layout_main(parent);
@@ -363,7 +377,11 @@ unsafe extern "system" fn edit_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam
             before_typing(ch);
         }
     }
-    call_old_edit(hwnd, msg, wparam, lparam)
+    let result = call_old_edit(hwnd, msg, wparam, lparam);
+    if msg == WM_KEYUP || msg == WM_LBUTTONUP {
+        update_overflow_indicators();
+    }
+    result
 }
 
 unsafe fn call_old_edit(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -389,7 +407,41 @@ unsafe fn layout_main(hwnd: HWND) {
     let mut rect: RECT = zeroed();
     GetClientRect(hwnd, &mut rect);
     MoveWindow(edit, 18, 54, (rect.right - 36).max(40), 54, 1);
+    let (left, right) = {
+        let state = APP.get().unwrap().lock().unwrap();
+        (state.hwnd_overflow_left as HWND, state.hwnd_overflow_right as HWND)
+    };
+    MoveWindow(left, 20, 54, 26, 54, 1);
+    MoveWindow(right, (rect.right - 44).max(20), 54, 26, 54, 1);
     recreate_edit_font();
+    update_overflow_indicators();
+}
+
+// Native EDIT controls scroll horizontally as the caret moves. The two small
+// markers make that movement obvious instead of silently clipping long input.
+unsafe fn update_overflow_indicators() {
+    if APP.get().is_none() { return; }
+    let (edit, left, right, scale) = {
+        let state = APP.get().unwrap().lock().unwrap();
+        (state.hwnd_edit as HWND, state.hwnd_overflow_left as HWND,
+         state.hwnd_overflow_right as HWND, state.settings.font_scale as i32)
+    };
+    if edit.is_null() { return; }
+    let text_length = GetWindowTextLengthW(edit).max(0) as u32;
+    let mut rect: RECT = zeroed();
+    GetClientRect(edit, &mut rect);
+    let average_digit_width = (17 * scale / 100).max(9) as u32;
+    let visible_capacity = ((rect.right - rect.left).max(1) as u32 / average_digit_width).max(1);
+    if text_length <= visible_capacity {
+        ShowWindow(left, SW_HIDE);
+        ShowWindow(right, SW_HIDE);
+        return;
+    }
+    let mut selection_start = 0u32;
+    let mut selection_end = 0u32;
+    SendMessageW(edit, EM_GETSEL, &mut selection_start as *mut u32 as WPARAM, &mut selection_end as *mut u32 as LPARAM);
+    ShowWindow(left, if selection_start > 0 { SW_SHOW } else { SW_HIDE });
+    ShowWindow(right, if selection_end < text_length { SW_SHOW } else { SW_HIDE });
 }
 
 unsafe fn recreate_edit_font() {
@@ -606,6 +658,7 @@ unsafe fn set_expression(text: &str, evaluated: bool) {
     state.setting_text = false;
     state.settings.expression = text.to_owned();
     state.settings.save();
+    update_overflow_indicators();
 }
 
 unsafe fn edit_changed() {
@@ -621,6 +674,7 @@ unsafe fn edit_changed() {
     };
     state.settings.save();
     InvalidateRect(state.hwnd_main as HWND, null(), 0);
+    update_overflow_indicators();
 }
 
 unsafe fn evaluate_current() {
